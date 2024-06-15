@@ -402,8 +402,6 @@ Vvveb.Components = {
 						element = selectedElement = Vvveb.Builder.selectedEl;
 						let value = event.detail.value, input = event.detail.input, origEvent = event.detail.origEvent;
 						
-						//console.log("propertyChange", event, value, input, origEvent);
-						
 						if (property.child) element = element.querySelector(property.child);
 						if (property.parent) element = element.parent(property.parent);
 						
@@ -1084,24 +1082,24 @@ Vvveb.Builder = {
 				});
 				
 				selectBoxPosition = function(event) {
-				
+						let pos;
+						let target;
+						
 						if (self.selectedEl) {
-							let pos = offset(self.selectedEl);
-							
-							SelectBox.style.top  = (pos.top - (self.frameDoc.scrollTop ?? 0)  - self.selectPadding) + "px"; 
-							SelectBox.style.left = (pos.left - (self.frameDoc.scrollLeft ?? 0) - self.selectPadding) + "px"; 
-						}
-						
+							pos    = offset(self.selectedEl);
+							target = self.selectedEl;
+						} else
 						if (self.highlightEl) {
-							let pos = offset(self.highlightEl);
-
-							highlightBox.style.top  = (pos.top - (self.frameDoc.scrollTop ?? 0)  - self.selectPadding) + "px"; 
-							highlightBox.style.left = (pos.left - (self.frameDoc.scrollLeft ?? 0) - self.selectPadding) + "px"; 
-							
-							//addSectionBox.style.display = "none";
+							pos    = offset(self.highlightEl);
+							target = self.highlightEl;
 						}
 						
-				};
+						SelectBox.style.top  = (pos.top - (self.frameDoc.scrollTop ?? 0)  - self.selectPadding) + "px"; 
+						SelectBox.style.left = (pos.left - (self.frameDoc.scrollLeft ?? 0) - self.selectPadding) + "px";
+
+						SelectBox.style.width = ((target.offsetWidth ?? target.clientWidth) + self.selectPadding * 2) + "px"; 			
+						SelectBox.style.height = ((target.offsetHeight ?? target.clientHeight) + self.selectPadding * 2) + "px";
+				}
 				
 				window.FrameWindow.addEventListener("scroll", selectBoxPosition);
 				window.FrameWindow.addEventListener("resize", selectBoxPosition);
@@ -1281,16 +1279,17 @@ Vvveb.Builder = {
 	
 	
 	selectNode:  function(node) {
-		let self = this;
 		let SelectBox = document.getElementById("select-box");
-		let SelectActions = document.getElementById("select-actions");
-		let AddSectionBtn = document.getElementById("add-section-btn");
-		let elementType = this._getElementType(node);
 		
 		if (!node) {
 			SelectBox.style.display = "none";
 			return;
 		}
+
+		let self = this;
+		let SelectActions = document.getElementById("select-actions");
+		let AddSectionBtn = document.getElementById("add-section-btn");
+		let elementType = this._getElementType(node);
 		
 		if (self.texteditEl && (self.selectedEl != node)) {
 			Vvveb.WysiwygEditor.destroy(self.texteditEl);
@@ -1753,33 +1752,32 @@ Vvveb.Builder = {
 			return false;
 		});
 		
+		let codeEditorOldValue;
 		document.getElementById("edit-code-btn").addEventListener("click", function(event) {
-			let selectedEl = Vvveb.Builder.selectedEl;
-			let value = selectedEl.innerHTML;
-			// uncomment to use outerHTML, not recommended
-			//let value = selectedEl.outerHTML;
+			let value = Vvveb.Builder.selectedEl.innerHTML;
+
 			Vvveb.ModalCodeEditor.show();
 			Vvveb.ModalCodeEditor.setValue(value);
 			
-			let oldValue = value;
+			codeEditorOldValue = value;
 
-			let onSave = function(event) {
-				selectedEl.innerHTML = event.detail;
-				//selectedEl.outerHTML = value;
-				
-				node = selectedEl;
-				Vvveb.Undo.addMutation({type:'characterData', 
-										target: node, 
-										oldValue: oldValue, 
-										newValue: node.innerHTML});				
-			};
-			
-			window.removeEventListener("vvveb.ModalCodeEditor.save", onSave); 
-			window.addEventListener("vvveb.ModalCodeEditor.save", onSave); 
-			
 			event.preventDefault();
 			return false;
 		});
+
+		let onSave = function(event) {
+			Vvveb.Builder.selectedEl.innerHTML = event.detail;
+			
+			node = Vvveb.Builder.selectedEl;
+			Vvveb.Undo.addMutation({type:'characterData', 
+				target: node, 
+				oldValue: codeEditorOldValue, 
+				newValue: node.innerHTML});				
+				
+			Vvveb.Builder.selectNode(node);	
+		};
+		
+		window.addEventListener("vvveb.ModalCodeEditor.save", onSave); 
 		
 		document.getElementById("translate-code-btn")?.addEventListener("click", function(event) {
 			let selectedEl = Vvveb.Builder.selectedEl;
@@ -2807,7 +2805,7 @@ Vvveb.StyleManager = {
 		let css = "";
 		for (media in this.styles) {
 			if (media === "tablet" || media === "mobile") {
-				css += `@media screen and (max-width: ${(media === 'tablet') ? this.tabletWidth : this.mobileWidth}){\n`
+				css += `@media screen and (max-width: ${(media === 'tablet') ? this.tabletWidth : this.mobileWidth}){\n\n`
 			}
 			for (selector in this.styles[media]) {
 				css += `${selector} {\n`;	
@@ -3422,6 +3420,8 @@ Vvveb.FileManager = {
 		this.tree.addEventListener("click", function (e) {
 			let element = event.target.closest("a");
 			if (element) {
+				e.stopImmediatePropagation();
+				if (element.classList.contains('view')) return;
 				e.preventDefault();
 				return false;
 			}
@@ -3431,6 +3431,7 @@ Vvveb.FileManager = {
 			let element = event.target.closest(".delete");
 			if (element) {
 				Vvveb.FileManager.deletePage(element.closest("li"), e);
+				e.stopImmediatePropagation();
 				e.preventDefault();
 				return false;
 			}
@@ -3440,6 +3441,7 @@ Vvveb.FileManager = {
 			let element = event.target.closest(".rename");
 			if (element) {
 				Vvveb.FileManager.renamePage(element.closest("li"), e, false);
+				e.stopImmediatePropagation();
 				e.preventDefault();
 				return false;
 			}
@@ -3449,6 +3451,7 @@ Vvveb.FileManager = {
 			let element = event.target.closest(".duplicate");
 			if (element) {
 				Vvveb.FileManager.renamePage(element.closest("li"), e, true);
+				e.stopImmediatePropagation();
 				e.preventDefault();
 				return false;
 			}
@@ -3498,7 +3501,7 @@ Vvveb.FileManager = {
 			
 			if (page) {
 				
-				fetch(deleteUrl, {method: "POST",  body: JSON.stringify({file:page.file})})
+				fetch(deleteUrl, {method: "POST",  body: new URLSearchParams({file:page.file})})
 				.then((response) => {
 					if (!response.ok) { throw new Error(response) }
 					return response.text()
@@ -3536,7 +3539,7 @@ Vvveb.FileManager = {
 			
 			if (page) {
 
-				fetch(deleteUrl, {method: "POST",  body: JSON.stringify({file:page.file, newfile:newfile, duplicate})})
+				fetch(renameUrl, {method: "POST",  body: new URLSearchParams({file:page.file, newfile:newfile, duplicate})})
 				.then((response) => {
 					if (!response.ok) { throw new Error(response) }
 					return response.text()
@@ -3569,8 +3572,8 @@ Vvveb.FileManager = {
 						}
 				})
 				.catch(error => {
-					console.log(error.statusText);
-					displayToast("bg-danger", "Error", "Error deleting page!");
+					console.log(error);
+					displayToast("bg-danger", "Error", "Error renaming page!");
 				});				
 			}
 		}
